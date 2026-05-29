@@ -120,7 +120,14 @@ where
             }
             drop(block_tx); // Disconnect channel
 
-            let (result_tx, result_rx) = crossbeam_channel::bounded(0);
+            // Buffer one finished block per worker instead of a rendezvous (capacity 0).
+            // With a rendezvous channel a worker that finishes a block blocks until the main
+            // thread is ready to receive, so while the main thread is busy writing one block
+            // every other worker stalls. Giving the channel `num_threads` slots lets each
+            // worker drop its result and immediately pick up the next block, keeping all cores
+            // saturated while the main thread reorders and writes. Memory stays bounded: at most
+            // `num_threads` extra blocks (each <= chunk_size) are in flight.
+            let (result_tx, result_rx) = crossbeam_channel::bounded(num_threads);
 
             // Spawn threads to process blocks
             for _ in 0..num_threads - 1 {
