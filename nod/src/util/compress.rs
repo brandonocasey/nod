@@ -461,9 +461,7 @@ pub(crate) mod zstd_api {
     const ZSTD_ERROR_DST_SIZE_TOO_SMALL: usize = 70usize.wrapping_neg();
 
     #[cfg(feature = "compress-zstd")]
-    pub fn compress_bound(size: usize) -> usize {
-        unsafe { zstd_raw::ZSTD_compressBound(size) }
-    }
+    pub fn compress_bound(size: usize) -> usize { unsafe { zstd_raw::ZSTD_compressBound(size) } }
 
     fn map_error_code(code: usize) -> io::Error {
         let msg = unsafe { CStr::from_ptr(zstd_raw::ZSTD_getErrorName(code)) }
