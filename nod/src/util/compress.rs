@@ -11,15 +11,15 @@ use crate::{
 #[derive(Debug, Clone)]
 pub enum DecompressionKind {
     None,
-    #[cfg(feature = "compress-zlib")]
+    #[cfg(feature = "extract-zlib")]
     Deflate,
-    #[cfg(feature = "compress-bzip2")]
+    #[cfg(feature = "extract-bzip2")]
     Bzip2,
-    #[cfg(feature = "compress-lzma")]
+    #[cfg(feature = "extract-lzma")]
     Lzma(Box<[u8]>),
-    #[cfg(feature = "compress-lzma")]
+    #[cfg(feature = "extract-lzma")]
     Lzma2(Box<[u8]>),
-    #[cfg(feature = "compress-zstd")]
+    #[cfg(feature = "extract-zstd")]
     Zstandard,
 }
 
@@ -28,13 +28,13 @@ impl DecompressionKind {
         let _data = &disc.compr_data[..disc.compr_data_len as usize];
         match disc.compression() {
             WIACompression::None => Ok(Self::None),
-            #[cfg(feature = "compress-bzip2")]
+            #[cfg(feature = "extract-bzip2")]
             WIACompression::Bzip2 => Ok(Self::Bzip2),
-            #[cfg(feature = "compress-lzma")]
+            #[cfg(feature = "extract-lzma")]
             WIACompression::Lzma => Ok(Self::Lzma(Box::from(_data))),
-            #[cfg(feature = "compress-lzma")]
+            #[cfg(feature = "extract-lzma")]
             WIACompression::Lzma2 => Ok(Self::Lzma2(Box::from(_data))),
-            #[cfg(feature = "compress-zstd")]
+            #[cfg(feature = "extract-zstd")]
             WIACompression::Zstandard => Ok(Self::Zstandard),
             comp => Err(Error::DiscFormat(format!("Unsupported WIA/RVZ compression: {:?}", comp))),
         }
@@ -53,15 +53,15 @@ impl DecompressionKind {
                 out[..buf.len()].copy_from_slice(buf);
                 Ok(buf.len())
             }
-            #[cfg(feature = "compress-zlib")]
+            #[cfg(feature = "extract-zlib")]
             DecompressionKind::Deflate => zlib_api::decompress(buf, out),
-            #[cfg(feature = "compress-bzip2")]
+            #[cfg(feature = "extract-bzip2")]
             DecompressionKind::Bzip2 => bzip2_api::decompress(buf, out),
-            #[cfg(feature = "compress-lzma")]
+            #[cfg(feature = "extract-lzma")]
             DecompressionKind::Lzma(data) => lzma_api::decompress_lzma(data, buf, out),
-            #[cfg(feature = "compress-lzma")]
+            #[cfg(feature = "extract-lzma")]
             DecompressionKind::Lzma2(data) => lzma_api::decompress_lzma2(data, buf, out),
-            #[cfg(feature = "compress-zstd")]
+            #[cfg(feature = "extract-zstd")]
             DecompressionKind::Zstandard => zstd_api::decompress(buf, out),
         }
     }
@@ -69,7 +69,7 @@ impl DecompressionKind {
     pub fn get_content_size(&self, buf: &[u8]) -> io::Result<Option<usize>> {
         match self {
             DecompressionKind::None => Ok(Some(buf.len())),
-            #[cfg(feature = "compress-zstd")]
+            #[cfg(feature = "extract-zstd")]
             DecompressionKind::Zstandard => zstd_api::get_content_size(buf),
             #[allow(unreachable_patterns)] // if compression features are disabled
             _ => Ok(None),
@@ -123,10 +123,13 @@ impl Compressor {
     }
 }
 
-#[cfg(feature = "compress-zlib-vendored")]
+#[cfg(feature = "zlib-vendored")]
 use libz_sys as zlib_raw;
 
-#[cfg(all(feature = "compress-zlib", not(feature = "compress-zlib-vendored")))]
+#[cfg(all(
+    any(feature = "extract-zlib", feature = "compress-zlib"),
+    not(feature = "zlib-vendored")
+))]
 mod zlib_raw {
     use core::ffi::{c_int, c_ulong};
 
@@ -136,11 +139,13 @@ mod zlib_raw {
     pub type uLongf = c_ulong;
 
     pub const Z_OK: c_int = 0;
+    #[cfg(feature = "compress-zlib")]
     pub const Z_BUF_ERROR: c_int = -5;
 
     #[cfg_attr(not(target_env = "msvc"), link(name = "z"))]
     #[cfg_attr(target_env = "msvc", link(name = "zlib", kind = "static"))]
     unsafe extern "C" {
+        #[cfg(feature = "extract-zlib")]
         pub fn uncompress(
             dest: *mut u8,
             destLen: *mut uLongf,
@@ -148,6 +153,7 @@ mod zlib_raw {
             sourceLen: uLong,
         ) -> c_int;
 
+        #[cfg(feature = "compress-zlib")]
         pub fn compress2(
             dest: *mut u8,
             destLen: *mut uLongf,
@@ -158,12 +164,15 @@ mod zlib_raw {
     }
 }
 
-#[cfg(feature = "compress-zlib")]
+#[cfg(any(feature = "extract-zlib", feature = "compress-zlib"))]
 mod zlib_api {
-    use std::{ffi::c_int, io};
+    #[cfg(feature = "compress-zlib")]
+    use std::ffi::c_int;
+    use std::io;
 
     use super::zlib_raw;
 
+    #[cfg(feature = "extract-zlib")]
     pub fn decompress(buf: &[u8], out: &mut [u8]) -> io::Result<usize> {
         let mut out_len = zlib_raw::uLongf::try_from(out.len())
             .map_err(|_| io::Error::other("Output buffer length exceeds zlib limits"))?;
@@ -180,6 +189,7 @@ mod zlib_api {
         }
     }
 
+    #[cfg(feature = "compress-zlib")]
     pub fn compress(buf: &[u8], level: u8, out: &mut Vec<u8>) -> io::Result<bool> {
         let in_len = zlib_raw::uLong::try_from(buf.len())
             .map_err(|_| io::Error::other("Input buffer length exceeds zlib limits"))?;
@@ -210,19 +220,26 @@ mod zlib_api {
     }
 }
 
-#[cfg(feature = "compress-bzip2-vendored")]
+#[cfg(feature = "bzip2-vendored")]
 use bzip2_sys as bzip2_raw;
 
-#[cfg(all(feature = "compress-bzip2", not(feature = "compress-bzip2-vendored")))]
+#[cfg(all(
+    any(feature = "extract-bzip2", feature = "compress-bzip2"),
+    not(feature = "bzip2-vendored")
+))]
 mod bzip2_raw {
     use core::ffi::{c_char, c_int, c_uint, c_void};
 
+    #[cfg(feature = "compress-bzip2")]
     pub const BZ_FINISH: c_int = 2;
 
     pub const BZ_OK: c_int = 0;
+    #[cfg(feature = "compress-bzip2")]
     pub const BZ_RUN_OK: c_int = 1;
+    #[cfg(feature = "compress-bzip2")]
     pub const BZ_FINISH_OK: c_int = 3;
     pub const BZ_STREAM_END: c_int = 4;
+    #[cfg(feature = "compress-bzip2")]
     pub const BZ_OUTBUFF_FULL: c_int = -8;
 
     #[repr(C)]
@@ -245,41 +262,47 @@ mod bzip2_raw {
     }
 
     macro_rules! abi_compat {
-        ($(pub fn $name:ident($($arg:ident: $t:ty),*) -> $ret:ty,)*) => {
+        ($($(#[$meta:meta])* pub fn $name:ident($($arg:ident: $t:ty),*) -> $ret:ty,)*) => {
             #[cfg(all(windows, target_env = "msvc"))]
             #[link(name = "bz2", kind = "static")]
             unsafe extern "system" {
-                $(pub fn $name($($arg: $t),*) -> $ret;)*
+                $($(#[$meta])* pub fn $name($($arg: $t),*) -> $ret;)*
             }
             #[cfg(all(windows, not(target_env = "msvc")))]
             #[link(name = "bz2")]
             unsafe extern "system" {
-                $(pub fn $name($($arg: $t),*) -> $ret;)*
+                $($(#[$meta])* pub fn $name($($arg: $t),*) -> $ret;)*
             }
             #[cfg(not(windows))]
             #[link(name = "bz2")]
             unsafe extern "C" {
-                $(pub fn $name($($arg: $t),*) -> $ret;)*
+                $($(#[$meta])* pub fn $name($($arg: $t),*) -> $ret;)*
             }
         }
     }
 
     abi_compat! {
+        #[cfg(feature = "compress-bzip2")]
         pub fn BZ2_bzCompressInit(stream: *mut bz_stream,
                                   blockSize100k: c_int,
                                   verbosity: c_int,
                                   workFactor: c_int) -> c_int,
+        #[cfg(feature = "compress-bzip2")]
         pub fn BZ2_bzCompress(stream: *mut bz_stream, action: c_int) -> c_int,
+        #[cfg(feature = "compress-bzip2")]
         pub fn BZ2_bzCompressEnd(stream: *mut bz_stream) -> c_int,
+        #[cfg(feature = "extract-bzip2")]
         pub fn BZ2_bzDecompressInit(stream: *mut bz_stream,
                                     verbosity: c_int,
                                     small: c_int) -> c_int,
+        #[cfg(feature = "extract-bzip2")]
         pub fn BZ2_bzDecompress(stream: *mut bz_stream) -> c_int,
+        #[cfg(feature = "extract-bzip2")]
         pub fn BZ2_bzDecompressEnd(stream: *mut bz_stream) -> c_int,
     }
 }
 
-#[cfg(feature = "compress-bzip2")]
+#[cfg(any(feature = "extract-bzip2", feature = "compress-bzip2"))]
 mod bzip2_api {
     use std::{
         ffi::{c_char, c_int, c_uint},
@@ -296,6 +319,7 @@ mod bzip2_api {
         io::Error::new(io::ErrorKind::InvalidData, format!("{context} failed with code {code}"))
     }
 
+    #[cfg(feature = "extract-bzip2")]
     pub fn decompress(buf: &[u8], out: &mut [u8]) -> io::Result<usize> {
         let in_len = c_uint::try_from(buf.len())
             .map_err(|_| io::Error::other("Input buffer length exceeds bzip2 limits"))?;
@@ -338,6 +362,7 @@ mod bzip2_api {
         }
     }
 
+    #[cfg(feature = "compress-bzip2")]
     pub fn compress(buf: &[u8], level: u8, out: &mut Vec<u8>) -> io::Result<bool> {
         let in_len = c_uint::try_from(buf.len())
             .map_err(|_| io::Error::other("Input buffer length exceeds bzip2 limits"))?;
@@ -382,19 +407,25 @@ mod bzip2_api {
     }
 }
 
-#[cfg(feature = "compress-zstd-vendored")]
+#[cfg(feature = "zstd-vendored")]
 use zstd_sys as zstd_raw;
 
-#[cfg(all(feature = "compress-zstd", not(feature = "compress-zstd-vendored")))]
+#[cfg(all(
+    any(feature = "extract-zstd", feature = "compress-zstd"),
+    not(feature = "zstd-vendored")
+))]
 mod zstd_raw {
     use core::ffi::{c_char, c_int, c_uint, c_ulonglong, c_void};
 
+    #[cfg(feature = "extract-zstd")]
     pub const ZSTD_CONTENTSIZE_UNKNOWN: i32 = -1;
+    #[cfg(feature = "extract-zstd")]
     pub const ZSTD_CONTENTSIZE_ERROR: i32 = -2;
 
     #[cfg_attr(not(target_env = "msvc"), link(name = "zstd"))]
     #[cfg_attr(target_env = "msvc", link(name = "zstd", kind = "static"))]
     unsafe extern "C" {
+        #[cfg(feature = "compress-zstd")]
         pub fn ZSTD_compress(
             dst: *mut c_void,
             dstCapacity: usize,
@@ -403,6 +434,7 @@ mod zstd_raw {
             compressionLevel: c_int,
         ) -> usize;
 
+        #[cfg(feature = "extract-zstd")]
         pub fn ZSTD_decompress(
             dst: *mut c_void,
             dstCapacity: usize,
@@ -410,22 +442,28 @@ mod zstd_raw {
             srcSize: usize,
         ) -> usize;
 
+        #[cfg(feature = "extract-zstd")]
         pub fn ZSTD_getFrameContentSize(src: *const c_void, srcSize: usize) -> c_ulonglong;
+        #[cfg(feature = "compress-zstd")]
         pub fn ZSTD_compressBound(srcSize: usize) -> usize;
         pub fn ZSTD_isError(result: usize) -> c_uint;
         pub fn ZSTD_getErrorName(result: usize) -> *const c_char;
     }
 }
 
-#[cfg(feature = "compress-zstd")]
+#[cfg(any(feature = "extract-zstd", feature = "compress-zstd"))]
 pub(crate) mod zstd_api {
     use std::{ffi::c_void, io};
 
     use super::{CStr, zstd_raw};
 
+    #[cfg(feature = "compress-zstd")]
     const ZSTD_ERROR_DST_SIZE_TOO_SMALL: usize = 70usize.wrapping_neg();
 
-    pub fn compress_bound(size: usize) -> usize { unsafe { zstd_raw::ZSTD_compressBound(size) } }
+    #[cfg(feature = "compress-zstd")]
+    pub fn compress_bound(size: usize) -> usize {
+        unsafe { zstd_raw::ZSTD_compressBound(size) }
+    }
 
     fn map_error_code(code: usize) -> io::Error {
         let msg = unsafe { CStr::from_ptr(zstd_raw::ZSTD_getErrorName(code)) }
@@ -434,6 +472,7 @@ pub(crate) mod zstd_api {
         io::Error::other(msg)
     }
 
+    #[cfg(feature = "extract-zstd")]
     pub fn decompress(buf: &[u8], out: &mut [u8]) -> io::Result<usize> {
         let code = unsafe {
             zstd_raw::ZSTD_decompress(
@@ -449,6 +488,7 @@ pub(crate) mod zstd_api {
         Ok(code)
     }
 
+    #[cfg(feature = "compress-zstd")]
     pub fn compress(buf: &[u8], level: i8, out: &mut Vec<u8>) -> io::Result<bool> {
         out.resize(out.capacity(), 0);
         let code = unsafe {
@@ -472,6 +512,7 @@ pub(crate) mod zstd_api {
         Ok(true)
     }
 
+    #[cfg(feature = "extract-zstd")]
     pub fn get_content_size(buf: &[u8]) -> io::Result<Option<usize>> {
         let size =
             unsafe { zstd_raw::ZSTD_getFrameContentSize(buf.as_ptr().cast::<c_void>(), buf.len()) };
@@ -489,10 +530,13 @@ pub(crate) mod zstd_api {
     }
 }
 
-#[cfg(feature = "compress-lzma-vendored")]
+#[cfg(feature = "lzma-vendored")]
 use liblzma_sys as lzma_raw;
 
-#[cfg(all(feature = "compress-lzma", not(feature = "compress-lzma-vendored")))]
+#[cfg(all(
+    any(feature = "extract-lzma", feature = "compress-lzma"),
+    not(feature = "lzma-vendored")
+))]
 mod lzma_raw {
     #![allow(non_camel_case_types)]
 
@@ -517,6 +561,7 @@ mod lzma_raw {
 
     pub const LZMA_PRESET_DEFAULT: u32 = 6;
 
+    #[cfg(feature = "compress-lzma")]
     pub const LZMA_DICT_SIZE_MIN: u32 = 4096;
 
     pub const LZMA_VLI_UNKNOWN: lzma_vli = u64::MAX;
@@ -565,6 +610,7 @@ mod lzma_raw {
     #[cfg_attr(not(target_env = "msvc"), link(name = "lzma"))]
     #[cfg_attr(target_env = "msvc", link(name = "lzma", kind = "static"))]
     unsafe extern "C" {
+        #[cfg(feature = "compress-lzma")]
         pub fn lzma_raw_buffer_encode(
             filters: *const lzma_filter,
             allocator: *const lzma_allocator,
@@ -575,6 +621,7 @@ mod lzma_raw {
             out_size: usize,
         ) -> lzma_ret;
 
+        #[cfg(feature = "extract-lzma")]
         pub fn lzma_raw_buffer_decode(
             filters: *const lzma_filter,
             allocator: *const lzma_allocator,
@@ -590,10 +637,11 @@ mod lzma_raw {
     }
 }
 
-#[cfg(feature = "compress-lzma")]
+#[cfg(any(feature = "extract-lzma", feature = "compress-lzma"))]
 pub(crate) mod lzma_api {
+    #[cfg(feature = "extract-lzma")]
+    use std::cmp::Ordering;
     use std::{
-        cmp::Ordering,
         ffi::c_void,
         io::{self, ErrorKind},
     };
@@ -622,6 +670,7 @@ pub(crate) mod lzma_api {
         Ok(options)
     }
 
+    #[cfg(feature = "extract-lzma")]
     fn lzma_lclppb_decode(options: &mut lzma_raw::lzma_options_lzma, byte: u8) -> io::Result<()> {
         let mut d = byte as u32;
         if d >= (9 * 5 * 5) {
@@ -637,6 +686,7 @@ pub(crate) mod lzma_api {
         Ok(())
     }
 
+    #[cfg(feature = "extract-lzma")]
     fn lzma_props_decode(props: &[u8]) -> io::Result<lzma_raw::lzma_options_lzma> {
         if props.len() != 5 {
             return Err(io::Error::new(
@@ -650,6 +700,7 @@ pub(crate) mod lzma_api {
         Ok(options)
     }
 
+    #[cfg(feature = "extract-lzma")]
     fn lzma2_props_decode(props: &[u8]) -> io::Result<lzma_raw::lzma_options_lzma> {
         if props.len() != 1 {
             return Err(io::Error::new(
@@ -672,6 +723,7 @@ pub(crate) mod lzma_api {
         Ok(options)
     }
 
+    #[cfg(feature = "compress-lzma")]
     fn lzma_lclppb_encode(options: &lzma_raw::lzma_options_lzma) -> io::Result<u8> {
         let byte = (options.pb * 5 + options.lp) * 9 + options.lc;
         if byte >= (9 * 5 * 5) {
@@ -683,6 +735,7 @@ pub(crate) mod lzma_api {
         Ok(byte as u8)
     }
 
+    #[cfg(feature = "compress-lzma")]
     fn lzma_props_encode(options: &lzma_raw::lzma_options_lzma) -> io::Result<[u8; 5]> {
         let mut props = [0u8; 5];
         props[0] = lzma_lclppb_encode(options)?;
@@ -690,6 +743,7 @@ pub(crate) mod lzma_api {
         Ok(props)
     }
 
+    #[cfg(feature = "compress-lzma")]
     fn get_dist_slot(dist: u32) -> u32 {
         if dist <= 4 {
             dist
@@ -699,6 +753,7 @@ pub(crate) mod lzma_api {
         }
     }
 
+    #[cfg(feature = "compress-lzma")]
     fn lzma2_props_encode(options: &lzma_raw::lzma_options_lzma) -> [u8; 1] {
         let mut d = options.dict_size.max(lzma_raw::LZMA_DICT_SIZE_MIN);
         d -= 1;
@@ -723,6 +778,7 @@ pub(crate) mod lzma_api {
         ]
     }
 
+    #[cfg(feature = "compress-lzma")]
     fn compress_raw(
         filter_id: lzma_raw::lzma_vli,
         level: u8,
@@ -757,6 +813,7 @@ pub(crate) mod lzma_api {
         }
     }
 
+    #[cfg(feature = "extract-lzma")]
     fn decompress_raw(
         filter_id: lzma_raw::lzma_vli,
         props: &[u8],
@@ -795,27 +852,33 @@ pub(crate) mod lzma_api {
         Ok(out_pos)
     }
 
+    #[cfg(feature = "compress-lzma")]
     pub fn compress_lzma(level: u8, buf: &[u8], out: &mut Vec<u8>) -> io::Result<bool> {
         compress_raw(lzma_raw::LZMA_FILTER_LZMA1, level, buf, out)
     }
 
+    #[cfg(feature = "compress-lzma")]
     pub fn compress_lzma2(level: u8, buf: &[u8], out: &mut Vec<u8>) -> io::Result<bool> {
         compress_raw(lzma_raw::LZMA_FILTER_LZMA2, level, buf, out)
     }
 
+    #[cfg(feature = "extract-lzma")]
     pub fn decompress_lzma(props: &[u8], buf: &[u8], out: &mut [u8]) -> io::Result<usize> {
         decompress_raw(lzma_raw::LZMA_FILTER_LZMA1, props, buf, out)
     }
 
+    #[cfg(feature = "extract-lzma")]
     pub fn decompress_lzma2(props: &[u8], buf: &[u8], out: &mut [u8]) -> io::Result<usize> {
         decompress_raw(lzma_raw::LZMA_FILTER_LZMA2, props, buf, out)
     }
 
+    #[cfg(feature = "compress-lzma")]
     pub fn lzma_props_encode_preset(level: u32) -> io::Result<[u8; 5]> {
         let options = preset_options(level)?;
         lzma_props_encode(&options)
     }
 
+    #[cfg(feature = "compress-lzma")]
     pub fn lzma2_props_encode_preset(level: u32) -> io::Result<[u8; 1]> {
         let options = preset_options(level)?;
         Ok(lzma2_props_encode(&options))

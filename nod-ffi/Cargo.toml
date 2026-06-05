@@ -16,16 +16,38 @@ name = "nod"
 crate-type = ["cdylib", "staticlib"]
 
 [features]
-default = ["compress-bzip2", "compress-lzma", "compress-zlib", "compress-zstd", "threading"]
+default = [
+    "extract-bzip2",
+    "compress-bzip2",
+    "extract-lzma",
+    "compress-lzma",
+    "extract-zlib",
+    "compress-zlib",
+    "extract-zstd",
+    "compress-zstd",
+    "threading",
+]
+extract-bzip2 = ["nod/extract-bzip2"]
+extract-bzip2-vendored = ["nod/extract-bzip2-vendored"]
+extract-bzip2-static = ["nod/extract-bzip2-static"]
 compress-bzip2 = ["nod/compress-bzip2"]
 compress-bzip2-vendored = ["nod/compress-bzip2-vendored"]
 compress-bzip2-static = ["nod/compress-bzip2-static"]
+extract-lzma = ["nod/extract-lzma"]
+extract-lzma-vendored = ["nod/extract-lzma-vendored"]
+extract-lzma-static = ["nod/extract-lzma-static"]
 compress-lzma = ["nod/compress-lzma"]
 compress-lzma-vendored = ["nod/compress-lzma-vendored"]
 compress-lzma-static = ["nod/compress-lzma-static"]
+extract-zlib = ["nod/extract-zlib"]
+extract-zlib-vendored = ["nod/extract-zlib-vendored"]
+extract-zlib-static = ["nod/extract-zlib-static"]
 compress-zlib = ["nod/compress-zlib"]
 compress-zlib-vendored = ["nod/compress-zlib-vendored"]
 compress-zlib-static = ["nod/compress-zlib-static"]
+extract-zstd = ["nod/extract-zstd"]
+extract-zstd-vendored = ["nod/extract-zstd-vendored"]
+extract-zstd-static = ["nod/extract-zstd-static"]
 compress-zstd = ["nod/compress-zstd"]
 compress-zstd-vendored = ["nod/compress-zstd-vendored"]
 compress-zstd-static = ["nod/compress-zstd-static"]

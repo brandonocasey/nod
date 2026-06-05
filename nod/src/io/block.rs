@@ -43,11 +43,11 @@ pub fn new(mut stream: Box<dyn DiscStream>) -> Result<Box<dyn BlockReader>> {
             Some(Format::Iso) => crate::io::iso::BlockReaderISO::new(stream)?,
             Some(Format::Ciso) => crate::io::ciso::BlockReaderCISO::new(stream)?,
             Some(Format::Gcz) => {
-                #[cfg(feature = "compress-zlib")]
+                #[cfg(feature = "extract-zlib")]
                 {
                     crate::io::gcz::BlockReaderGCZ::new(stream)?
                 }
-                #[cfg(not(feature = "compress-zlib"))]
+                #[cfg(not(feature = "extract-zlib"))]
                 return Err(Error::DiscFormat("GCZ support is disabled".to_string()));
             }
             Some(Format::Nfs) => {
@@ -83,11 +83,11 @@ pub fn open(filename: &Path) -> Result<Box<dyn BlockReader>> {
         Some(Format::Iso) => crate::io::iso::BlockReaderISO::new(stream)?,
         Some(Format::Ciso) => crate::io::ciso::BlockReaderCISO::new(stream)?,
         Some(Format::Gcz) => {
-            #[cfg(feature = "compress-zlib")]
+            #[cfg(feature = "extract-zlib")]
             {
                 crate::io::gcz::BlockReaderGCZ::new(stream)?
             }
-            #[cfg(not(feature = "compress-zlib"))]
+            #[cfg(not(feature = "extract-zlib"))]
             return Err(Error::DiscFormat("GCZ support is disabled".to_string()));
         }
         Some(Format::Nfs) => match path.parent() {
