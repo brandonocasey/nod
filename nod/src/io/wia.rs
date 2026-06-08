@@ -1323,7 +1323,8 @@ impl BlockProcessorWIA {
                     // We only do this if we're _not_ compressing the data, as the compression
                     // will likely handle this better.
                     if self.compressor.kind == Compression::None && zeroes > SEED_SIZE_BYTES + 4 {
-                        debug!("Packing {} zero bytes in group {}", zeroes, info.index);
+                        #[cfg(not(target_arch = "wasm32"))]
+                        tracing::debug!("Packing {} zero bytes in group {}", zeroes, info.index);
                         junk_areas.push((data_offset, u32::MAX, zeroes));
                     }
 
@@ -1342,7 +1343,8 @@ impl BlockProcessorWIA {
                 .take_while(|(a, b)| a == b)
                 .count();
             if num_match > SEED_SIZE_BYTES + 4 {
-                debug!("Matched {} junk bytes at offset {:#X}", num_match, offset);
+                #[cfg(not(target_arch = "wasm32"))]
+                tracing::debug!("Matched {} junk bytes at offset {:#X}", num_match, offset);
                 junk_areas.push((data_offset, sector, num_match));
                 offset += num_match as u64;
                 data_offset += num_match;
