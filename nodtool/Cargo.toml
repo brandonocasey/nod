@@ -16,24 +16,10 @@ categories = ["command-line-utilities", "parser-implementations"]
 build = "build.rs"
 
 [features]
-default = [
-    "extract-bzip2",
-    "compress-bzip2",
-    "extract-lzma",
-    "compress-lzma",
-    "extract-zlib",
-    "compress-zlib",
-    "extract-zstd",
-    "compress-zstd",
-    "threading",
-]
-extract-bzip2 = ["nod/extract-bzip2-static"]
+default = ["compress-bzip2", "compress-lzma", "compress-zlib", "compress-zstd", "threading"]
 compress-bzip2 = ["nod/compress-bzip2-static"]
-extract-lzma = ["nod/extract-lzma-static"]
 compress-lzma = ["nod/compress-lzma-static"]
-extract-zlib = ["nod/extract-zlib-static"]
 compress-zlib = ["nod/compress-zlib-static"]
-extract-zstd = ["nod/extract-zstd-static"]
 compress-zstd = ["nod/compress-zstd-static"]
 openssl = ["nod/openssl"]
 openssl-vendored = ["nod/openssl-vendored"]
