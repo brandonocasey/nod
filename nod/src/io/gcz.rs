@@ -7,6 +7,7 @@ use std::{
 
 use adler2::adler32_slice;
 use bytes::{BufMut, Bytes, BytesMut};
+use tracing::trace;
 use zerocopy::{FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout, little_endian::*};
 
 use crate::{
@@ -217,7 +218,11 @@ impl BlockProcessor for BlockProcessorGCZ {
 
         // Try to compress block
         let is_compressed = if self.compressor.compress(&block_data)? {
-            println!("Compressed block {} to {}", block_idx, self.compressor.buffer.len());
+            trace!(
+                block_idx,
+                compressed_len = self.compressor.buffer.len(),
+                "compressed GCZ block"
+            );
             block_data = Bytes::copy_from_slice(self.compressor.buffer.as_slice());
             true
         } else {
